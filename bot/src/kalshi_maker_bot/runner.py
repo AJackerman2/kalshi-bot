@@ -20,6 +20,7 @@ from typing import Any
 
 import httpx
 
+from .catalysts import hours_until_close, is_within_catalyst_buffer
 from .config import Settings, get_settings
 from .db import Database
 from .events import EventBus
@@ -110,11 +111,49 @@ class Runner:
         markets = self._fetch_all_open_markets()
         now = datetime.now(UTC)
 
-        ask_lookup: dict[str, int | None] = {}
+        # Pre-filter on market metadata before fetching orderbooks.  Each
+        # orderbook fetch costs a Kalshi-rate-limited HTTP round-trip; with
+        # ~10-20k open markets this dominates scan time.  Anything that can
+        # never become a candidate (OI/vol too low, market closing too soon,
+        # inside a catalyst window) is excluded here so we never spend a
+        # round-trip on it.
+        pre_filtered: list[dict[str, Any]] = []
+        pre_rej: dict[str, int] = {}
         for m in markets:
-            ticker = m.get("ticker")
-            if not ticker:
+            if not m.get("ticker"):
                 continue
+            oi = int(m.get("open_interest") or 0)
+            if oi < self._settings.min_open_interest:
+                pre_rej["oi_low"] = pre_rej.get("oi_low", 0) + 1
+                continue
+            vol = int(m.get("volume_24h") or m.get("volume") or 0)
+            if vol < self._settings.min_recent_volume:
+                pre_rej["vol_low"] = pre_rej.get("vol_low", 0) + 1
+                continue
+            hrs = hours_until_close(m, now)
+            if hrs is None:
+                pre_rej["no_close_time"] = pre_rej.get("no_close_time", 0) + 1
+                continue
+            if hrs < self._settings.min_hours_to_close:
+                pre_rej["close_too_soon"] = pre_rej.get("close_too_soon", 0) + 1
+                continue
+            in_buf, _ = is_within_catalyst_buffer(
+                m, now, self._settings.catalyst_buffer_min
+            )
+            if in_buf:
+                pre_rej["catalyst"] = pre_rej.get("catalyst", 0) + 1
+                continue
+            pre_filtered.append(m)
+
+        log.info(
+            "scan_prefilter_done",
+            total_markets=len(markets),
+            passed_to_orderbook=len(pre_filtered),
+        )
+
+        ask_lookup: dict[str, int | None] = {}
+        for m in pre_filtered:
+            ticker = m["ticker"]
             try:
                 ob = self._client.get_orderbook(ticker)
             except Exception as exc:
@@ -150,18 +189,20 @@ class Runner:
             except Exception as exc:
                 log.warning("pg_market_mirror_failed", ticker=ticker, error=str(exc))
 
-        cands, rejs = filter_candidates(markets, ask_lookup, self._settings, now)
-        # Histogram of rejection reasons (strip the variable suffixes like ":94").
-        rej_reasons: dict[str, int] = {}
+        cands, rejs = filter_candidates(pre_filtered, ask_lookup, self._settings, now)
+        # Merge pre-filter reasons with the ask-band rejections from
+        # filter_candidates so the dashboard sees one unified histogram.
+        rej_reasons: dict[str, int] = pre_rej.copy()
         for r in rejs:
             key = r.reason.split(":", 1)[0]
             rej_reasons[key] = rej_reasons.get(key, 0) + 1
+        total_rejected = len(markets) - len(cands)
         self._events.emit(
             "scan_completed",
             {
                 "markets_seen": len(markets),
                 "candidates": len(cands),
-                "rejections": len(rejs),
+                "rejections": total_rejected,
                 "rejection_reasons": rej_reasons,
             },
         )
