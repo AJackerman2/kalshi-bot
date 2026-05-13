@@ -141,7 +141,7 @@ by a Neon Postgres mirror.
   (canonical), then opportunistically mirrors to Neon via `PgMirror`
   (psycopg).  Mirror failures log a warning and do not block.  Mirrors
   are id-keyed upserts, so reconnection naturally re-pushes any drift.
-- **Dashboard side**: a Next.js App-Router app under `apps/dashboard/`.
+- **Dashboard side**: a Next.js App-Router app at the repo root (the Python bot is under `bot/`).
   All Postgres queries run server-side (RSC / route handlers) via
   `@neondatabase/serverless` (HTTP fetch driver, no socket needed).
   Nothing reads from the client; the page is a server component with

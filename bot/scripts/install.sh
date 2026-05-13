@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Provision the Kalshi Maker Bot on a fresh Hetzner CX22 (Ubuntu 24.04).
 # Run as root.  Idempotent.
+#
+# Expects the repo cloned to $APP_HOME (default /opt/kalshi-maker-bot).
+# Python lives under $APP_HOME/bot; this script installs from there.
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
@@ -10,6 +13,7 @@ fi
 
 APP_USER="kalshibot"
 APP_HOME="/opt/kalshi-maker-bot"
+BOT_DIR="$APP_HOME/bot"
 ETC_DIR="/etc/kalshi-maker-bot"
 DATA_DIR="/var/lib/kalshi-maker-bot"
 LOG_DIR="/var/log/kalshi-maker-bot"
@@ -30,7 +34,12 @@ if [[ ! -d "$APP_HOME/.git" ]]; then
   exit 2
 fi
 
-cd "$APP_HOME"
+if [[ ! -d "$BOT_DIR" ]]; then
+  echo "Expected $BOT_DIR to exist after cloning; is this the right repo?" >&2
+  exit 3
+fi
+
+cd "$BOT_DIR"
 sudo -u "$APP_USER" python3.12 -m venv .venv
 sudo -u "$APP_USER" .venv/bin/pip install --upgrade pip
 sudo -u "$APP_USER" .venv/bin/pip install -e .
@@ -44,8 +53,8 @@ install -o root -g root -m 0644 systemd/kalshi-maker-bot.service /etc/systemd/sy
 systemctl daemon-reload
 
 echo "Done.  Next steps:"
-echo "  1. Edit $ETC_DIR/.env (MODE=sim, fill Kalshi + Sheets creds)."
+echo "  1. Edit $ETC_DIR/.env (MODE=sim, fill Kalshi + Neon creds)."
 echo "  2. Place RSA key at $ETC_DIR/kalshi_private_key.pem (mode 0600, owner $APP_USER)."
-echo "  3. Place Google creds at $ETC_DIR/google-credentials.json (mode 0640)."
+echo "  3. (Optional) Place Google creds at $ETC_DIR/google-credentials.json (mode 0640)."
 echo "  4. systemctl enable --now kalshi-maker-bot.service"
 echo "  5. journalctl -u kalshi-maker-bot.service -f"
