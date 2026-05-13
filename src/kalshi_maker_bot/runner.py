@@ -26,10 +26,10 @@ from .events import EventBus
 from .kalshi_client import KalshiClient
 from .logging_setup import configure_logging, get_logger
 from .order_manager import OrderManager
+from .pg_mirror import make_mirror
 from .scanner import filter_candidates
 from .sheets import EventSink
 from .simulator import Simulator
-from .supabase_writer import make_writer as make_supabase_writer
 
 log = get_logger(__name__)
 
@@ -39,12 +39,12 @@ class Runner:
         self._settings = settings
         self._db = Database(settings.db_path)
         self._sink = EventSink(settings)
-        self._supabase = make_supabase_writer(settings)
-        self._events = EventBus(self._db, self._sink, supabase=self._supabase)
+        self._mirror = make_mirror(settings)
+        self._events = EventBus(self._db, self._sink, mirror=self._mirror)
         self._http = httpx.Client(timeout=15.0)
         self._client = KalshiClient(settings, http_client=self._http)
         self._simulator = Simulator(
-            settings, self._db, self._client, self._events, supabase=self._supabase
+            settings, self._db, self._client, self._events, mirror=self._mirror
         )
         self._order_mgr = OrderManager(settings, self._db, self._client, self._simulator)
         self._stop = False
@@ -67,6 +67,7 @@ class Runner:
             self._client.close()
         finally:
             self._http.close()
+            self._mirror.close()
             self._db.close()
 
     # --- main loop ----------------------------------------------------------
@@ -135,7 +136,7 @@ class Runner:
                 open_interest=open_interest,
             )
             try:
-                self._supabase.upsert_market(
+                self._mirror.upsert_market(
                     ticker=ticker,
                     event_ticker=m.get("event_ticker"),
                     title=m.get("title"),
@@ -147,7 +148,7 @@ class Runner:
                     open_interest=open_interest,
                 )
             except Exception as exc:
-                log.warning("supabase_market_mirror_failed", ticker=ticker, error=str(exc))
+                log.warning("pg_market_mirror_failed", ticker=ticker, error=str(exc))
 
         cands, rejs = filter_candidates(markets, ask_lookup, self._settings, now)
         self._events.emit(

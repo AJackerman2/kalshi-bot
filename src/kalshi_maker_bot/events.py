@@ -13,8 +13,8 @@ from typing import Any
 
 from .db import Database
 from .logging_setup import get_logger
+from .pg_mirror import PgMirror, _NullPgMirror
 from .sheets import EventSink
-from .supabase_writer import SupabaseWriter, _NullSupabaseWriter
 
 log = get_logger(__name__)
 
@@ -24,11 +24,11 @@ class EventBus:
         self,
         db: Database,
         sink: EventSink,
-        supabase: SupabaseWriter | _NullSupabaseWriter | None = None,
+        mirror: PgMirror | _NullPgMirror | None = None,
     ) -> None:
         self._db = db
         self._sink = sink
-        self._supabase = supabase or _NullSupabaseWriter()
+        self._mirror = mirror or _NullPgMirror()
 
     def emit(
         self,
@@ -44,10 +44,10 @@ class EventBus:
         except Exception as exc:
             log.warning("event_sink_failed", kind=kind, error=str(exc))
         try:
-            self._supabase.emit_event(
+            self._mirror.emit_event(
                 event_id=event_id, ts=ts, kind=kind, ticker=ticker,
                 order_id=order_id, payload=payload,
             )
         except Exception as exc:
-            log.warning("supabase_event_failed", kind=kind, error=str(exc))
+            log.warning("pg_event_failed", kind=kind, error=str(exc))
         return event_id

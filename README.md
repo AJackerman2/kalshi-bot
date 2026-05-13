@@ -45,7 +45,7 @@ src/kalshi_maker_bot/
   db.py                SQLite schema + DAO
   events.py            EventBus: DB + JSONL + Sheets + Supabase fan-out
   sheets.py            Google Sheets sink
-  supabase_writer.py   Supabase Postgres mirror (best-effort)
+  pg_mirror.py         Neon Postgres mirror (best-effort)
   kalshi_client.py     REST client. Write endpoints HARD-REFUSE in sim mode
   scanner.py           candidate filter
   strategy.py          bid + sizing math
@@ -64,7 +64,7 @@ apps/dashboard/        Next.js Vercel dashboard (separate README)
 ## Dashboard
 
 A Vercel-deployed Next.js app under `apps/dashboard/` reads from the
-Supabase mirror and shows:
+Neon mirror and shows:
 
 - account snapshot (bankroll, realized + unrealized P&L, value, win rate)
 - daily + cumulative P&L chart

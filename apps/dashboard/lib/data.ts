@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { sql } from "./db";
 
 export type AccountSummary = {
   bankroll_cents: number;
@@ -48,66 +48,88 @@ function bankrollCents() {
   return Number.isFinite(v) ? Math.max(0, Math.trunc(v)) : 100_000;
 }
 
+function toNumber(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") return Number(v);
+  if (typeof v === "bigint") return Number(v);
+  return 0;
+}
+
 export async function getOpenPositions(): Promise<OpenPosition[]> {
-  const sb = supabase();
-  const { data, error } = await sb
-    .from("open_positions")
-    .select("*")
-    .order("filled_at", { ascending: false });
-  if (error) throw new Error(`open_positions failed: ${error.message}`);
-  return (data ?? []) as OpenPosition[];
+  const rows = (await sql()`
+    SELECT id, ticker, title, close_time, fill_price_cents, quantity,
+           current_ask_cents, filled_at, unrealized_pnl_cents
+      FROM kalshi.open_positions
+     ORDER BY filled_at DESC
+  `) as unknown[];
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    id: toNumber(r.id),
+    ticker: String(r.ticker),
+    title: (r.title as string | null) ?? null,
+    close_time: (r.close_time as string | null) ?? null,
+    fill_price_cents: toNumber(r.fill_price_cents),
+    quantity: toNumber(r.quantity),
+    current_ask_cents:
+      r.current_ask_cents == null ? null : toNumber(r.current_ask_cents),
+    filled_at: String(r.filled_at),
+    unrealized_pnl_cents:
+      r.unrealized_pnl_cents == null ? null : toNumber(r.unrealized_pnl_cents),
+  }));
 }
 
 export async function getDailyPnl(): Promise<DailyPnl[]> {
-  const sb = supabase();
-  const { data, error } = await sb
-    .from("daily_pnl")
-    .select("*")
-    .order("day", { ascending: true });
-  if (error) throw new Error(`daily_pnl failed: ${error.message}`);
-  return (data ?? []) as DailyPnl[];
+  const rows = (await sql()`
+    SELECT day::text AS day, pnl_cents, orders_resolved, wins, losses
+      FROM kalshi.daily_pnl
+     ORDER BY day ASC
+  `) as unknown[];
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    day: String(r.day),
+    pnl_cents: toNumber(r.pnl_cents),
+    orders_resolved: toNumber(r.orders_resolved),
+    wins: toNumber(r.wins),
+    losses: toNumber(r.losses),
+  }));
 }
 
 export async function getRecentEvents(limit = 150, hours = 72): Promise<EventRow[]> {
-  const sb = supabase();
-  const since = new Date(Date.now() - hours * 3_600_000).toISOString();
-  const { data, error } = await sb
-    .from("events")
-    .select("*")
-    .gte("ts", since)
-    .order("ts", { ascending: false })
-    .limit(limit);
-  if (error) throw new Error(`events failed: ${error.message}`);
-  return (data ?? []) as EventRow[];
+  const rows = (await sql()`
+    SELECT id, ts, kind, ticker, order_id, payload
+      FROM kalshi.events
+     WHERE ts >= now() - make_interval(hours => ${hours})
+     ORDER BY ts DESC
+     LIMIT ${limit}
+  `) as unknown[];
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    id: toNumber(r.id),
+    ts: String(r.ts),
+    kind: String(r.kind),
+    ticker: (r.ticker as string | null) ?? null,
+    order_id: r.order_id == null ? null : toNumber(r.order_id),
+    payload: (r.payload as Record<string, unknown>) ?? {},
+  }));
 }
 
 export async function getAccountSummary(): Promise<AccountSummary> {
-  const sb = supabase();
   const bankroll = bankrollCents();
 
-  const [resolvedRes, positionsRes] = await Promise.all([
-    sb
-      .from("sim_orders")
-      .select("pnl_cents")
-      .not("pnl_cents", "is", null),
-    sb.from("open_positions").select("*"),
-  ]);
-
-  if (resolvedRes.error) {
-    throw new Error(`resolved orders failed: ${resolvedRes.error.message}`);
-  }
-  if (positionsRes.error) {
-    throw new Error(`open positions failed: ${positionsRes.error.message}`);
-  }
-
-  const resolved = (resolvedRes.data ?? []) as { pnl_cents: number | null }[];
-  const positions = (positionsRes.data ?? []) as OpenPosition[];
+  const [resolvedRows, openRows] = (await Promise.all([
+    sql()`
+      SELECT pnl_cents
+        FROM kalshi.sim_orders
+       WHERE pnl_cents IS NOT NULL
+    `,
+    sql()`
+      SELECT fill_price_cents, quantity, unrealized_pnl_cents
+        FROM kalshi.open_positions
+    `,
+  ])) as unknown[][];
 
   let realized = 0;
   let wins = 0;
   let losses = 0;
-  for (const r of resolved) {
-    const v = r.pnl_cents ?? 0;
+  for (const r of resolvedRows as Record<string, unknown>[]) {
+    const v = toNumber(r.pnl_cents);
     realized += v;
     if (v > 0) wins++;
     else losses++;
@@ -115,22 +137,22 @@ export async function getAccountSummary(): Promise<AccountSummary> {
 
   let unrealized = 0;
   let openCost = 0;
-  for (const p of positions) {
-    if (p.unrealized_pnl_cents !== null && p.unrealized_pnl_cents !== undefined) {
-      unrealized += p.unrealized_pnl_cents;
-    }
-    openCost += p.fill_price_cents * p.quantity;
+  let openCount = 0;
+  for (const r of openRows as Record<string, unknown>[]) {
+    openCount++;
+    if (r.unrealized_pnl_cents != null) unrealized += toNumber(r.unrealized_pnl_cents);
+    openCost += toNumber(r.fill_price_cents) * toNumber(r.quantity);
   }
 
-  const totalResolved = resolved.length;
+  const totalResolved = (resolvedRows as unknown[]).length;
   return {
     bankroll_cents: bankroll,
     realized_pnl_cents: realized,
     unrealized_pnl_cents: unrealized,
     account_value_cents: bankroll + realized + unrealized,
-    open_position_count: positions.length,
+    open_position_count: openCount,
     open_position_cost_cents: openCost,
-    total_fills: positions.length + totalResolved,
+    total_fills: openCount + totalResolved,
     total_resolved: totalResolved,
     wins,
     losses,

@@ -24,9 +24,9 @@ from .db import Database
 from .events import EventBus
 from .kalshi_client import KalshiClient, OrderbookSnapshot
 from .logging_setup import get_logger
+from .pg_mirror import PgMirror, _NullPgMirror
 from .pnl import order_pnl_cents, per_contract_fee_cents
 from .strategy import BidPlan
-from .supabase_writer import SupabaseWriter, _NullSupabaseWriter
 
 log = get_logger(__name__)
 
@@ -85,21 +85,21 @@ class Simulator:
         db: Database,
         client: KalshiClient,
         events: EventBus,
-        supabase: SupabaseWriter | _NullSupabaseWriter | None = None,
+        mirror: PgMirror | _NullPgMirror | None = None,
     ) -> None:
         self._settings = settings
         self._db = db
         self._client = client
         self._events = events
-        self._supabase = supabase or _NullSupabaseWriter()
+        self._mirror = mirror or _NullPgMirror()
 
     def _mirror_order(self, order_id: int) -> None:
         row = self._db.get_sim_order(order_id)
         if row is not None:
             try:
-                self._supabase.upsert_sim_order(row)
+                self._mirror.upsert_sim_order(row)
             except Exception as exc:
-                log.warning("supabase_mirror_failed", order_id=order_id, error=str(exc))
+                log.warning("pg_mirror_failed", order_id=order_id, error=str(exc))
 
     # --- placement ----------------------------------------------------------
 

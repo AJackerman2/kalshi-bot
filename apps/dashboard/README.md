@@ -1,7 +1,7 @@
 # Dashboard
 
 Vercel-deployed Next.js UI for the Kalshi Maker Bot. Read-only mirror of
-the bot's state through Supabase.
+the bot's state through Neon Postgres (`@neondatabase/serverless`).
 
 ## Panels
 
@@ -22,8 +22,7 @@ cookie on success; everything outside `/login` and `/api/login` is gated.
 
 | Name | Description |
 |------|-------------|
-| `SUPABASE_URL` | Supabase project URL (server-only). |
-| `SUPABASE_SERVICE_KEY` | Service-role key. Bypasses RLS; never expose to the browser. |
+| `DATABASE_URL` | Neon pooled connection string. Server-only. |
 | `DASHBOARD_PASSWORD` | Shared password for the login form. |
 | `SIM_STARTING_BANKROLL_CENTS` | Starting bankroll in cents, defaults to 100000 ($1000). Should match the bot's setting. |
 
@@ -41,8 +40,7 @@ npm run dev
 ```bash
 cd apps/dashboard
 vercel link              # if not yet linked
-vercel env add SUPABASE_URL production
-vercel env add SUPABASE_SERVICE_KEY production
+vercel env add DATABASE_URL production
 vercel env add DASHBOARD_PASSWORD production
 vercel env add SIM_STARTING_BANKROLL_CENTS production
 vercel --prod
