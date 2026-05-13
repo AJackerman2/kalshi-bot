@@ -166,6 +166,10 @@ class Database:
             (pnl_cents, _utcnow_iso(), order_id),
         )
 
+    def get_sim_order(self, order_id: int) -> sqlite3.Row | None:
+        cur = self._conn.execute("SELECT * FROM sim_orders WHERE id=?", (order_id,))
+        return cur.fetchone()
+
     def get_open_orders(self) -> list[sqlite3.Row]:
         cur = self._conn.execute("SELECT * FROM sim_orders WHERE status='open'")
         return cur.fetchall()

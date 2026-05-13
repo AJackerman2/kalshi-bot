@@ -19,6 +19,7 @@ dependencies = [
     "structlog>=24.1",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "supabase>=2.5",
 ]
 
 [project.optional-dependencies]

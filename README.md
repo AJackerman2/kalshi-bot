@@ -40,23 +40,39 @@ contracts.
 
 ```
 src/kalshi_maker_bot/
-  config.py          MODE + tunables (pydantic-settings, .env-driven)
-  logging_setup.py   structlog JSON
-  db.py              SQLite schema + DAO
-  events.py          EventBus: DB + JSONL + Sheets fan-out
-  sheets.py          Google Sheets sink
-  kalshi_client.py   REST client. Write endpoints HARD-REFUSE in sim mode
-  scanner.py         candidate filter
-  strategy.py        bid + sizing math
-  catalysts.py       close + catalyst windows
-  pnl.py             fee + P&L math
-  simulator.py       sim order lifecycle (no live calls allowed here)
-  order_manager.py   bridge from scanner output to simulator / live path
-  runner.py          main loop
-tests/               unit tests, focused on the mode gate
-systemd/             unit file
-scripts/install.sh   Hetzner provisioning
+  config.py            MODE + tunables (pydantic-settings, .env-driven)
+  logging_setup.py     structlog JSON
+  db.py                SQLite schema + DAO
+  events.py            EventBus: DB + JSONL + Sheets + Supabase fan-out
+  sheets.py            Google Sheets sink
+  supabase_writer.py   Supabase Postgres mirror (best-effort)
+  kalshi_client.py     REST client. Write endpoints HARD-REFUSE in sim mode
+  scanner.py           candidate filter
+  strategy.py          bid + sizing math
+  catalysts.py         close + catalyst windows
+  pnl.py               fee + P&L math
+  simulator.py         sim order lifecycle (no live calls allowed here)
+  order_manager.py     bridge from scanner output to simulator / live path
+  runner.py            main loop
+tests/                 unit tests, focused on the mode gate
+systemd/               unit file
+scripts/install.sh     Hetzner provisioning
+supabase/migrations/   schema for the dashboard mirror
+apps/dashboard/        Next.js Vercel dashboard (separate README)
 ```
+
+## Dashboard
+
+A Vercel-deployed Next.js app under `apps/dashboard/` reads from the
+Supabase mirror and shows:
+
+- account snapshot (bankroll, realized + unrealized P&L, value, win rate)
+- daily + cumulative P&L chart
+- open positions with mark-to-market unrealized P&L
+- last-72h event feed
+
+See `apps/dashboard/README.md` and `DECISIONS.md` (D11/D12) for the
+architecture and deployment steps.
 
 ---
 

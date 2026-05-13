@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     sheets_tab_name: str = "events"
     sheets_enabled: bool = True
 
+    supabase_url: str = ""
+    supabase_service_key: str = ""
+    supabase_enabled: bool = True
+
+    sim_starting_bankroll_cents: Annotated[int, Field(ge=0)] = 100_000  # $1000
+
     log_level: str = "INFO"
 
     @field_validator("max_ask_cents")

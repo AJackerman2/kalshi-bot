@@ -29,6 +29,7 @@ from .order_manager import OrderManager
 from .scanner import filter_candidates
 from .sheets import EventSink
 from .simulator import Simulator
+from .supabase_writer import make_writer as make_supabase_writer
 
 log = get_logger(__name__)
 
@@ -38,10 +39,13 @@ class Runner:
         self._settings = settings
         self._db = Database(settings.db_path)
         self._sink = EventSink(settings)
-        self._events = EventBus(self._db, self._sink)
+        self._supabase = make_supabase_writer(settings)
+        self._events = EventBus(self._db, self._sink, supabase=self._supabase)
         self._http = httpx.Client(timeout=15.0)
         self._client = KalshiClient(settings, http_client=self._http)
-        self._simulator = Simulator(settings, self._db, self._client, self._events)
+        self._simulator = Simulator(
+            settings, self._db, self._client, self._events, supabase=self._supabase
+        )
         self._order_mgr = OrderManager(settings, self._db, self._client, self._simulator)
         self._stop = False
         self._last_scan_at = 0.0
@@ -117,6 +121,8 @@ class Runner:
                 ask_lookup[ticker] = None
                 continue
             ask_lookup[ticker] = ob.yes_ask_cents
+            volume = int(m.get("volume_24h") or m.get("volume") or 0)
+            open_interest = int(m.get("open_interest") or 0)
             self._db.upsert_market_snapshot(
                 ticker=ticker,
                 event_ticker=m.get("event_ticker"),
@@ -125,9 +131,23 @@ class Runner:
                 expected_expiry=m.get("expected_expiration_time"),
                 ask_cents=ob.yes_ask_cents,
                 bid_cents=ob.yes_bid_cents,
-                volume=int(m.get("volume_24h") or m.get("volume") or 0),
-                open_interest=int(m.get("open_interest") or 0),
+                volume=volume,
+                open_interest=open_interest,
             )
+            try:
+                self._supabase.upsert_market(
+                    ticker=ticker,
+                    event_ticker=m.get("event_ticker"),
+                    title=m.get("title"),
+                    close_time=m.get("close_time"),
+                    expected_expiry=m.get("expected_expiration_time"),
+                    ask_cents=ob.yes_ask_cents,
+                    bid_cents=ob.yes_bid_cents,
+                    volume=volume,
+                    open_interest=open_interest,
+                )
+            except Exception as exc:
+                log.warning("supabase_market_mirror_failed", ticker=ticker, error=str(exc))
 
         cands, rejs = filter_candidates(markets, ask_lookup, self._settings, now)
         self._events.emit(

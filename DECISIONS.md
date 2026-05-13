@@ -132,6 +132,45 @@ entries in the SQLite `events` table.
 - Position reconciliation against Kalshi-side state (irrelevant in sim).
 - Backtest harness against historical orderbook data.
 
+## D11. Dashboard architecture (Supabase + Vercel)
+
+The bot lives on Hetzner; the dashboard lives on Vercel.  They are joined
+by a Supabase Postgres mirror.
+
+- **Bot side**: every state mutation continues to hit SQLite first
+  (canonical), then opportunistically mirrors to Supabase via
+  `SupabaseWriter`.  Mirror failures log a warning and do not block.
+  Mirrors are id-keyed upserts, so reconnection naturally re-pushes
+  any drift.
+- **Dashboard side**: a Next.js App-Router app under `apps/dashboard/`.
+  All Supabase queries run server-side (RSC / route handlers) with the
+  *service-role* key.  Nothing reads from the client; the page is a
+  server component with `revalidate = 30`.  No `NEXT_PUBLIC_SUPABASE_*`
+  exists by design.
+- **Auth**: single shared password via `DASHBOARD_PASSWORD`.  A Next
+  middleware verifies a signed cookie on every route except
+  `/login` and `/api/login`.  The cookie value *is* the password; we
+  accept the leak risk for a single-user dashboard.  Rotate by changing
+  the env var.
+- **Account-value math**: documented in the migration and
+  `apps/dashboard/lib/data.ts`.
+  `account_value = STARTING_BANKROLL + realized_pnl + sum(unrealized_pnl)`
+  where `unrealized_pnl = (current_yes_ask - fill_price) * qty`, gross of
+  any hypothetical close-leg fee.  Document any change before flipping to live.
+- **Why service-role on Vercel and not anon + RLS policies?**  Faster to
+  ship for a single-user dashboard.  If we ever want broader access we
+  add explicit policies; for now RLS is on with no policies, so the only
+  way to read is via service-role.
+
+## D12. Supabase project lifecycle
+
+- One project (`kalshi-bot`) in `us-east-1`, under the existing org.
+- Free tier allowed only 2 projects; org upgraded to Pro ($25/mo) to
+  add a third without disturbing existing projects.
+- Migrations live in `supabase/migrations/`.  The bot does NOT manage
+  migrations -- the dashboard owner runs `apply_migration` via MCP or
+  the Supabase CLI.
+
 ---
 
 ## Self-review notes
