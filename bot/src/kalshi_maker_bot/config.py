@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     min_open_interest: Annotated[int, Field(ge=0)] = 1000
     min_recent_volume: Annotated[int, Field(ge=0)] = 100
     cancel_drift_cents: Annotated[int, Field(ge=1)] = 2
-    close_buffer_min: Annotated[int, Field(ge=1)] = 10
+    close_buffer_min: Annotated[int, Field(ge=0)] = 0
     refresh_interval_min: Annotated[int, Field(ge=1)] = 5
     catalyst_buffer_min: Annotated[int, Field(ge=0)] = 30
 

@@ -190,15 +190,19 @@ about why the running config differs from the paper's parameters.
   edge slightly weaker than the 90-97c band; more opportunities.
 - **`MIN_HOURS_TO_CLOSE` 24h → 0.5h (30 min).**  Original brief locked
   this at 24h.  User wanted exposure to short-duration markets (sports
-  tonight, CPI tomorrow).  Acceptable because:
-    - The strategy is hold-to-resolution; hold length itself doesn't
-      change expected return.
-    - The existing `CLOSE_BUFFER_MIN=10` cancel rule guarantees we won't
-      sit with open orders inside the last 10 min of a market's life.
-    - 30 min leaves at least 20 min of "open" time before close-buffer
-      kicks in, avoiding enter-then-immediately-cancel loops.
+  tonight, CPI tomorrow).  Acceptable because the strategy is
+  hold-to-resolution; hold length itself doesn't change expected return.
   If you want to push lower, set `MIN_HOURS_TO_CLOSE=0.25` (15 min) or
-  `0` (let close-buffer be the only floor).
+  `0` (no minimum).
+- **`CLOSE_BUFFER_MIN` 10 → 0 (disabled).**  This rule only ever
+  cancelled UNFILLED resting bids inside the last N min of a market's
+  life; filled positions are always held to resolution regardless.
+  User wanted unfilled bids to rest all the way to close so we capture
+  any final-minutes ask drop.  Trade-off: very-late fills resolve almost
+  immediately with no time for anything to play out -- but at 82-97c
+  favorites the immediate-fill EV is still positive (the favorite
+  resolves YES the vast majority of the time at those prices).  If we
+  see pathologically late fills hurting P&L, restore to 5-10.
 - **Kalshi API key generated as Read/Write instead of Read-only.**  User
   preferred avoiding the regen friction in Session 2.  Reduces the live-
   trade defense from four gates to three:

@@ -48,8 +48,8 @@ const LIFECYCLE: Row[] = [
   },
   {
     label: "Cancel for close",
-    value: "≤ 10 min to market close",
-    note: "avoid resolution-time fills",
+    value: "disabled",
+    note: "unfilled bids rest until close; filled positions always hold to resolution",
   },
   {
     label: "Cancel for refresh",
