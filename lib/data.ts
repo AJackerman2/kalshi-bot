@@ -43,6 +43,16 @@ export type EventRow = {
   payload: Record<string, unknown>;
 };
 
+export type NearMissMarket = {
+  ticker: string;
+  title: string | null;
+  close_time: string | null;
+  last_ask_cents: number | null;
+  last_open_interest: number | null;
+  last_volume: number | null;
+  last_seen_at: string;
+};
+
 function bankrollCents() {
   const v = Number(process.env.SIM_STARTING_BANKROLL_CENTS ?? "100000");
   return Number.isFinite(v) ? Math.max(0, Math.trunc(v)) : 100_000;
@@ -107,6 +117,36 @@ export async function getRecentEvents(limit = 150, hours = 72): Promise<EventRow
     ticker: (r.ticker as string | null) ?? null,
     order_id: r.order_id == null ? null : toNumber(r.order_id),
     payload: (r.payload as Record<string, unknown>) ?? {},
+  }));
+}
+
+export async function getMarketsNearQualifying(limit = 30): Promise<NearMissMarket[]> {
+  // The bot updates `markets` every scan.  We surface markets whose latest
+  // snapshot is "close to qualifying" -- specifically: ask in a slightly wider
+  // band (78-99) AND non-trivial OI (>= 200).  Sorted to put the closest
+  // misses on top: in-band first, then by descending OI.
+  const rows = (await sql()`
+    SELECT ticker, title, close_time, last_ask_cents, last_open_interest,
+           last_volume, last_seen_at
+      FROM kalshi.markets
+     WHERE last_ask_cents IS NOT NULL
+       AND last_ask_cents BETWEEN 78 AND 99
+       AND COALESCE(last_open_interest, 0) >= 200
+     ORDER BY
+       (last_ask_cents BETWEEN 82 AND 97) DESC,
+       COALESCE(last_open_interest, 0) DESC,
+       last_seen_at DESC
+     LIMIT ${limit}
+  `) as unknown[];
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    ticker: String(r.ticker),
+    title: (r.title as string | null) ?? null,
+    close_time: (r.close_time as string | null) ?? null,
+    last_ask_cents: r.last_ask_cents == null ? null : toNumber(r.last_ask_cents),
+    last_open_interest:
+      r.last_open_interest == null ? null : toNumber(r.last_open_interest),
+    last_volume: r.last_volume == null ? null : toNumber(r.last_volume),
+    last_seen_at: String(r.last_seen_at),
   }));
 }
 

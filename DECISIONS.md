@@ -177,6 +177,44 @@ The schema in `supabase/migrations/0001_initial_schema.sql` is plain
 Postgres -- it runs unchanged in Neon's SQL editor.  The directory name
 is preserved for history.
 
+## D13. User-directed strategy overrides (post-Session-1-spec)
+
+After Session 1 went live, AJackerman2 directed three deviations from the
+original brief.  Recording them here so future-us doesn't get confused
+about why the running config differs from the paper's parameters.
+
+- **Ask band widened 90-97c → 82-97c.** Burgi/Deng/Whelan show
+  favorite-longshot edge across 50c+ contracts with the strongest signal
+  at the high end; 82c is still well into "favorite" territory and gives
+  the bot a much larger pool of qualifying markets.  Per-trade expected
+  edge slightly weaker than the 90-97c band; more opportunities.
+- **`MIN_HOURS_TO_CLOSE` 24h → 0.5h (30 min).**  Original brief locked
+  this at 24h.  User wanted exposure to short-duration markets (sports
+  tonight, CPI tomorrow).  Acceptable because the strategy is
+  hold-to-resolution; hold length itself doesn't change expected return.
+  If you want to push lower, set `MIN_HOURS_TO_CLOSE=0.25` (15 min) or
+  `0` (no minimum).
+- **`CLOSE_BUFFER_MIN` 10 → 0 (disabled).**  This rule only ever
+  cancelled UNFILLED resting bids inside the last N min of a market's
+  life; filled positions are always held to resolution regardless.
+  User wanted unfilled bids to rest all the way to close so we capture
+  any final-minutes ask drop.  Trade-off: very-late fills resolve almost
+  immediately with no time for anything to play out -- but at 82-97c
+  favorites the immediate-fill EV is still positive (the favorite
+  resolves YES the vast majority of the time at those prices).  If we
+  see pathologically late fills hurting P&L, restore to 5-10.
+- **Kalshi API key generated as Read/Write instead of Read-only.**  User
+  preferred avoiding the regen friction in Session 2.  Reduces the live-
+  trade defense from four gates to three:
+    1. ~~Kalshi server-side scope rejection~~  (gone -- key now has write
+       scope)
+    2. `runner.py::main` refuses to start if `MODE=live`
+    3. `OrderManager._place_live_order` raises `NotImplementedError`
+    4. `KalshiClient.place_order` / `cancel_order` raise `SimModeRefused`
+  Still robust against accidents: all three remaining gates would need
+  to be defeated for a live trade to fire.  Mentioned explicitly so it's
+  on the audit trail.
+
 ---
 
 ## Self-review notes
