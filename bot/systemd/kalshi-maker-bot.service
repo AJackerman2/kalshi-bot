@@ -1,0 +1,34 @@
+[Unit]
+Description=Kalshi Maker Bot (Session 1: simulation only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kalshibot
+Group=kalshibot
+WorkingDirectory=/opt/kalshi-maker-bot/bot
+EnvironmentFile=/etc/kalshi-maker-bot/.env
+ExecStart=/opt/kalshi-maker-bot/bot/.venv/bin/python -m kalshi_maker_bot
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kalshi-maker-bot
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/kalshi-maker-bot /var/log/kalshi-maker-bot
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
