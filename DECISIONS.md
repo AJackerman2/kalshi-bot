@@ -177,6 +177,40 @@ The schema in `supabase/migrations/0001_initial_schema.sql` is plain
 Postgres -- it runs unchanged in Neon's SQL editor.  The directory name
 is preserved for history.
 
+## D13. User-directed strategy overrides (post-Session-1-spec)
+
+After Session 1 went live, AJackerman2 directed three deviations from the
+original brief.  Recording them here so future-us doesn't get confused
+about why the running config differs from the paper's parameters.
+
+- **Ask band widened 90-97c → 82-97c.** Burgi/Deng/Whelan show
+  favorite-longshot edge across 50c+ contracts with the strongest signal
+  at the high end; 82c is still well into "favorite" territory and gives
+  the bot a much larger pool of qualifying markets.  Per-trade expected
+  edge slightly weaker than the 90-97c band; more opportunities.
+- **`MIN_HOURS_TO_CLOSE` 24h → 0.5h (30 min).**  Original brief locked
+  this at 24h.  User wanted exposure to short-duration markets (sports
+  tonight, CPI tomorrow).  Acceptable because:
+    - The strategy is hold-to-resolution; hold length itself doesn't
+      change expected return.
+    - The existing `CLOSE_BUFFER_MIN=10` cancel rule guarantees we won't
+      sit with open orders inside the last 10 min of a market's life.
+    - 30 min leaves at least 20 min of "open" time before close-buffer
+      kicks in, avoiding enter-then-immediately-cancel loops.
+  If you want to push lower, set `MIN_HOURS_TO_CLOSE=0.25` (15 min) or
+  `0` (let close-buffer be the only floor).
+- **Kalshi API key generated as Read/Write instead of Read-only.**  User
+  preferred avoiding the regen friction in Session 2.  Reduces the live-
+  trade defense from four gates to three:
+    1. ~~Kalshi server-side scope rejection~~  (gone -- key now has write
+       scope)
+    2. `runner.py::main` refuses to start if `MODE=live`
+    3. `OrderManager._place_live_order` raises `NotImplementedError`
+    4. `KalshiClient.place_order` / `cancel_order` raise `SimModeRefused`
+  Still robust against accidents: all three remaining gates would need
+  to be defeated for a live trade to fire.  Mentioned explicitly so it's
+  on the audit trail.
+
 ---
 
 ## Self-review notes

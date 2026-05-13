@@ -22,11 +22,11 @@ class Settings(BaseSettings):
     kalshi_private_key_path: Path = Path("/etc/kalshi-maker-bot/kalshi_private_key.pem")
     kalshi_base_url: str = "https://api.elections.kalshi.com/trade-api/v2"
 
-    min_ask_cents: Annotated[int, Field(ge=1, le=99)] = 90
+    min_ask_cents: Annotated[int, Field(ge=1, le=99)] = 82
     max_ask_cents: Annotated[int, Field(ge=1, le=99)] = 97
     bid_offset_cents: Annotated[int, Field(ge=1, le=2)] = 1
     dollars_per_market: Annotated[float, Field(gt=0)] = 25.0
-    min_hours_to_close: Annotated[float, Field(ge=0)] = 24.0
+    min_hours_to_close: Annotated[float, Field(ge=0)] = 0.5
     min_open_interest: Annotated[int, Field(ge=0)] = 1000
     min_recent_volume: Annotated[int, Field(ge=0)] = 100
     cancel_drift_cents: Annotated[int, Field(ge=1)] = 2
