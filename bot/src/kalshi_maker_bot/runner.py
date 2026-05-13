@@ -151,9 +151,19 @@ class Runner:
                 log.warning("pg_market_mirror_failed", ticker=ticker, error=str(exc))
 
         cands, rejs = filter_candidates(markets, ask_lookup, self._settings, now)
+        # Histogram of rejection reasons (strip the variable suffixes like ":94").
+        rej_reasons: dict[str, int] = {}
+        for r in rejs:
+            key = r.reason.split(":", 1)[0]
+            rej_reasons[key] = rej_reasons.get(key, 0) + 1
         self._events.emit(
             "scan_completed",
-            {"markets_seen": len(markets), "candidates": len(cands), "rejections": len(rejs)},
+            {
+                "markets_seen": len(markets),
+                "candidates": len(cands),
+                "rejections": len(rejs),
+                "rejection_reasons": rej_reasons,
+            },
         )
         for cand in cands:
             try:
@@ -173,7 +183,9 @@ class Runner:
     def _fetch_all_open_markets(self) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         cursor: str | None = None
-        for _ in range(50):  # hard cap on pagination loops
+        # 200 pages * 200/page = 40_000 markets ceiling.  Kalshi's typical
+        # open-market count fluctuates around 10-25k, so this gives headroom.
+        for _ in range(200):
             resp = self._client.list_open_markets(cursor=cursor)
             out.extend(resp.get("markets") or [])
             cursor = resp.get("cursor")

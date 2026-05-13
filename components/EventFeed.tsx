@@ -31,8 +31,16 @@ function summarize(e: EventRow): string {
       const sign = pnl > 0 ? "+" : "";
       return `${p.ticker} ${p.outcome} · ${sign}${(pnl / 100).toFixed(2)} P&L`;
     }
-    case "scan_completed":
-      return `${p.markets_seen} markets · ${p.candidates} candidates · ${p.rejections} rejected`;
+    case "scan_completed": {
+      const reasons = (p.rejection_reasons as Record<string, number>) ?? {};
+      const top = Object.entries(reasons)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([k, v]) => `${k}:${v}`)
+        .join(", ");
+      const head = `${p.markets_seen} markets · ${p.candidates} candidates · ${p.rejections} rejected`;
+      return top ? `${head} (${top})` : head;
+    }
     case "candidate_skipped":
       return `${p.ticker} skipped (${p.reason})`;
     case "loop_iter_failed":
