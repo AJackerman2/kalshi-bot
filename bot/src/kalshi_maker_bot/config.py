@@ -27,8 +27,14 @@ class Settings(BaseSettings):
     bid_offset_cents: Annotated[int, Field(ge=1, le=2)] = 1
     dollars_per_market: Annotated[float, Field(gt=0)] = 25.0
     min_hours_to_close: Annotated[float, Field(ge=0)] = 0.5
-    min_open_interest: Annotated[int, Field(ge=0)] = 1000
-    min_recent_volume: Annotated[int, Field(ge=0)] = 100
+    # Kalshi's /markets list response currently reports open_interest = 0 and
+    # volume_24h = 0 across the entire near-term universe (~17k markets); the
+    # individual /markets/{ticker} endpoint may have real numbers but we
+    # don't fetch it for filtering.  These gates therefore default to 0 --
+    # the YES-ask-in-band check carries the liquidity signal.  Override via
+    # env if Kalshi fixes the list endpoint and we want a real floor.
+    min_open_interest: Annotated[int, Field(ge=0)] = 0
+    min_recent_volume: Annotated[int, Field(ge=0)] = 0
     cancel_drift_cents: Annotated[int, Field(ge=1)] = 2
     close_buffer_min: Annotated[int, Field(ge=0)] = 0
     refresh_interval_min: Annotated[int, Field(ge=1)] = 5
