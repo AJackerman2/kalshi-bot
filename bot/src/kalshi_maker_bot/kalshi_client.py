@@ -136,10 +136,17 @@ class KalshiClient:
 
     # --- read endpoints -----------------------------------------------------
 
-    def list_open_markets(self, limit: int = 200, cursor: str | None = None) -> dict[str, Any]:
+    def list_open_markets(
+        self,
+        limit: int = 200,
+        cursor: str | None = None,
+        max_close_ts: int | None = None,
+    ) -> dict[str, Any]:
         params: dict[str, Any] = {"status": "open", "limit": limit}
         if cursor:
             params["cursor"] = cursor
+        if max_close_ts is not None:
+            params["max_close_ts"] = max_close_ts
         return self._request("GET", "markets", params=params)
 
     def get_market(self, ticker: str) -> dict[str, Any]:
