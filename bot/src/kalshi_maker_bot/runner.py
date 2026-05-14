@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import signal
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -111,12 +111,8 @@ class Runner:
         markets = self._fetch_all_open_markets()
         now = datetime.now(UTC)
 
-        # TEMP DIAGNOSTIC: surface the OI / volume distribution across the
-        # whole fetched set.  The market-list dump in #9 confirmed Kalshi's
-        # response includes "open_interest" with value 0 for the first
-        # markets, but we don't yet know whether *any* market in the catalog
-        # we're pulling has non-zero OI.  Remove once we have non-zero
-        # candidates.
+        # Log the OI / volume distribution once per scan -- cheap and gives
+        # us visibility into Kalshi's market mix in the dashboard's journal.
         if markets:
             oi_values = sorted(int(m.get("open_interest") or 0) for m in markets)
             vol_values = sorted(
@@ -129,13 +125,10 @@ class Runner:
                 oi_max=oi_values[-1],
                 oi_p99=oi_values[int(n * 0.99)],
                 oi_p90=oi_values[int(n * 0.9)],
-                oi_p50=oi_values[n // 2],
                 oi_gt_0=sum(1 for v in oi_values if v > 0),
                 oi_gt_50=sum(1 for v in oi_values if v > 50),
-                oi_gt_1000=sum(1 for v in oi_values if v > 1000),
                 vol_max=vol_values[-1],
                 vol_p99=vol_values[int(n * 0.99)],
-                vol_p90=vol_values[int(n * 0.9)],
                 vol_gt_0=sum(1 for v in vol_values if v > 0),
             )
 
@@ -252,14 +245,21 @@ class Runner:
     def _fetch_all_open_markets(self) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         cursor: str | None = None
-        # 1000 pages * 200/page = 200_000 markets ceiling.  Kalshi's catalog
-        # of "open" markets includes thousands of untraded auto-created
-        # sub-markets; capping too low risks paginating only through the
-        # zero-OI tail and never reaching the active markets.  At ~10 req/s
-        # this is ~100s of pagination per scan in the worst case -- still
-        # acceptable for our 60s+ scan interval.
+        # Server-side filter: only fetch markets closing within the configured
+        # window.  Kalshi's full open catalog (200k+ markets) is dominated by
+        # long-dated election micro-markets with no trading; restricting to
+        # markets closing in the next N days yields the actually-tradeable
+        # set in O(thousands) rather than O(hundreds of thousands).
+        max_close_ts = int(
+            (
+                datetime.now(UTC)
+                + timedelta(days=self._settings.scan_close_window_days)
+            ).timestamp()
+        )
         for _ in range(1000):
-            resp = self._client.list_open_markets(cursor=cursor)
+            resp = self._client.list_open_markets(
+                cursor=cursor, max_close_ts=max_close_ts
+            )
             out.extend(resp.get("markets") or [])
             cursor = resp.get("cursor")
             if not cursor:

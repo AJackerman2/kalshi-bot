@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     close_buffer_min: Annotated[int, Field(ge=0)] = 0
     refresh_interval_min: Annotated[int, Field(ge=1)] = 5
     catalyst_buffer_min: Annotated[int, Field(ge=0)] = 30
+    # Server-side cap on how far out market close_time can be when fetching
+    # the open-market list.  Kalshi's catalog includes hundreds of thousands
+    # of long-dated election micro-markets with no trading; filtering by
+    # close window shrinks the dataset to actually-tradeable markets.
+    scan_close_window_days: Annotated[int, Field(ge=1)] = 30
 
     scan_interval_sec: Annotated[int, Field(ge=10)] = 300
     monitor_interval_sec: Annotated[int, Field(ge=5)] = 60
