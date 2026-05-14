@@ -72,11 +72,6 @@ def _sign_request(key: rsa.RSAPrivateKey, timestamp_ms: str, method: str, path: 
 
 
 class KalshiClient:
-    # TEMP DIAGNOSTIC counter, shared across all instances in a process.
-    # Caps the number of orderbook_dbg_sample log lines so journalctl doesn't
-    # drown.  Reset on process restart.  Remove once orderbook parser is verified.
-    _dbg_orderbook_samples: int = 0
-
     def __init__(self, settings: Settings, http_client: httpx.Client | None = None) -> None:
         self._settings = settings
         self._client = http_client or httpx.Client(timeout=15.0)
@@ -152,15 +147,24 @@ class KalshiClient:
 
     def get_orderbook(self, ticker: str) -> OrderbookSnapshot:
         raw = self._request("GET", f"markets/{ticker}/orderbook")
-        # TEMP DIAGNOSTIC: log the raw response shape for the first 5
-        # orderbook fetches per process so we can confirm the parser is
-        # reading the fields Kalshi actually returns.  Remove once verified.
-        if KalshiClient._dbg_orderbook_samples < 5:
-            KalshiClient._dbg_orderbook_samples += 1
-            log.info("orderbook_dbg_sample", ticker=ticker, raw=raw)
         ob = raw.get("orderbook", {}) or {}
-        yes_book = [(int(p), int(s)) for p, s in (ob.get("yes") or [])]
-        no_book = [(int(p), int(s)) for p, s in (ob.get("no") or [])]
+        # Kalshi's orderbook endpoint returns "yes_dollars" / "no_dollars",
+        # arrays of [price_dollars, quantity].  Convert dollars to integer
+        # cents (Kalshi's minimum tick is 1c so rounding is safe).  Fall back
+        # to the legacy "yes" / "no" keys (cents) if a future API revision
+        # changes the names back -- the parser then still produces a result.
+        yes_raw = ob.get("yes_dollars")
+        no_raw = ob.get("no_dollars")
+        if yes_raw is not None or no_raw is not None:
+            yes_book = [
+                (int(round(float(p) * 100)), int(s)) for p, s in (yes_raw or [])
+            ]
+            no_book = [
+                (int(round(float(p) * 100)), int(s)) for p, s in (no_raw or [])
+            ]
+        else:
+            yes_book = [(int(p), int(s)) for p, s in (ob.get("yes") or [])]
+            no_book = [(int(p), int(s)) for p, s in (ob.get("no") or [])]
         yes_bid = max((p for p, _ in yes_book), default=None)
         # YES ask is derived from the highest NO buy: selling YES at P is the
         # same as buying NO at 100 - P.
