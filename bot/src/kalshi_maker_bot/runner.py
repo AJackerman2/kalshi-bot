@@ -111,14 +111,33 @@ class Runner:
         markets = self._fetch_all_open_markets()
         now = datetime.now(UTC)
 
-        # TEMP DIAGNOSTIC: dump the first 3 markets in the list each scan so
-        # we can verify what fields Kalshi is actually returning.  We saw
-        # 100% rejection on "open_interest < threshold" even with threshold=50
-        # across 40k markets, which strongly suggests a field-name change in
-        # Kalshi's API (cf. yes_dollars/no_dollars in the orderbook).  Remove
-        # once verified.
-        for sample in markets[:3]:
-            log.info("market_list_dbg_sample", market=sample)
+        # TEMP DIAGNOSTIC: surface the OI / volume distribution across the
+        # whole fetched set.  The market-list dump in #9 confirmed Kalshi's
+        # response includes "open_interest" with value 0 for the first
+        # markets, but we don't yet know whether *any* market in the catalog
+        # we're pulling has non-zero OI.  Remove once we have non-zero
+        # candidates.
+        if markets:
+            oi_values = sorted(int(m.get("open_interest") or 0) for m in markets)
+            vol_values = sorted(
+                int(m.get("volume_24h") or m.get("volume") or 0) for m in markets
+            )
+            n = len(oi_values)
+            log.info(
+                "scan_metadata_distribution",
+                total=n,
+                oi_max=oi_values[-1],
+                oi_p99=oi_values[int(n * 0.99)],
+                oi_p90=oi_values[int(n * 0.9)],
+                oi_p50=oi_values[n // 2],
+                oi_gt_0=sum(1 for v in oi_values if v > 0),
+                oi_gt_50=sum(1 for v in oi_values if v > 50),
+                oi_gt_1000=sum(1 for v in oi_values if v > 1000),
+                vol_max=vol_values[-1],
+                vol_p99=vol_values[int(n * 0.99)],
+                vol_p90=vol_values[int(n * 0.9)],
+                vol_gt_0=sum(1 for v in vol_values if v > 0),
+            )
 
         # Pre-filter on market metadata before fetching orderbooks.  Each
         # orderbook fetch costs a Kalshi-rate-limited HTTP round-trip; with
@@ -233,9 +252,13 @@ class Runner:
     def _fetch_all_open_markets(self) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         cursor: str | None = None
-        # 200 pages * 200/page = 40_000 markets ceiling.  Kalshi's typical
-        # open-market count fluctuates around 10-25k, so this gives headroom.
-        for _ in range(200):
+        # 1000 pages * 200/page = 200_000 markets ceiling.  Kalshi's catalog
+        # of "open" markets includes thousands of untraded auto-created
+        # sub-markets; capping too low risks paginating only through the
+        # zero-OI tail and never reaching the active markets.  At ~10 req/s
+        # this is ~100s of pagination per scan in the worst case -- still
+        # acceptable for our 60s+ scan interval.
+        for _ in range(1000):
             resp = self._client.list_open_markets(cursor=cursor)
             out.extend(resp.get("markets") or [])
             cursor = resp.get("cursor")
