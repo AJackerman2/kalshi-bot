@@ -72,6 +72,11 @@ def _sign_request(key: rsa.RSAPrivateKey, timestamp_ms: str, method: str, path: 
 
 
 class KalshiClient:
+    # TEMP DIAGNOSTIC counter, shared across all instances in a process.
+    # Caps the number of orderbook_dbg_sample log lines so journalctl doesn't
+    # drown.  Reset on process restart.  Remove once orderbook parser is verified.
+    _dbg_orderbook_samples: int = 0
+
     def __init__(self, settings: Settings, http_client: httpx.Client | None = None) -> None:
         self._settings = settings
         self._client = http_client or httpx.Client(timeout=15.0)
@@ -147,6 +152,12 @@ class KalshiClient:
 
     def get_orderbook(self, ticker: str) -> OrderbookSnapshot:
         raw = self._request("GET", f"markets/{ticker}/orderbook")
+        # TEMP DIAGNOSTIC: log the raw response shape for the first 5
+        # orderbook fetches per process so we can confirm the parser is
+        # reading the fields Kalshi actually returns.  Remove once verified.
+        if KalshiClient._dbg_orderbook_samples < 5:
+            KalshiClient._dbg_orderbook_samples += 1
+            log.info("orderbook_dbg_sample", ticker=ticker, raw=raw)
         ob = raw.get("orderbook", {}) or {}
         yes_book = [(int(p), int(s)) for p, s in (ob.get("yes") or [])]
         no_book = [(int(p), int(s)) for p, s in (ob.get("no") or [])]
