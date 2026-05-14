@@ -111,6 +111,15 @@ class Runner:
         markets = self._fetch_all_open_markets()
         now = datetime.now(UTC)
 
+        # TEMP DIAGNOSTIC: dump the first 3 markets in the list each scan so
+        # we can verify what fields Kalshi is actually returning.  We saw
+        # 100% rejection on "open_interest < threshold" even with threshold=50
+        # across 40k markets, which strongly suggests a field-name change in
+        # Kalshi's API (cf. yes_dollars/no_dollars in the orderbook).  Remove
+        # once verified.
+        for sample in markets[:3]:
+            log.info("market_list_dbg_sample", market=sample)
+
         # Pre-filter on market metadata before fetching orderbooks.  Each
         # orderbook fetch costs a Kalshi-rate-limited HTTP round-trip; with
         # ~10-20k open markets this dominates scan time.  Anything that can
