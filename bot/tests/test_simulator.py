@@ -114,7 +114,8 @@ def test_end_to_end_sim_lifecycle(tmp_path, now_utc):
 
     sim = Simulator(s, db, client, events)
     cand = Candidate(
-        ticker="MKT", title="t", ask_cents=95, close_time=None, volume=200, open_interest=2000
+        ticker="MKT", title="t", ask_cents=95, close_time=None, volume=200, open_interest=2000,
+        event_ticker=None,
     )
     plan = build_bid_plan(cand.ticker, cand.ask_cents, s)
     order_id = sim.place_sim_order(plan, cand.ask_cents)

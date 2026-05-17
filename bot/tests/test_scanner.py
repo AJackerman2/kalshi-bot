@@ -22,10 +22,11 @@ def _s(**kw) -> Settings:
 
 def test_ask_in_band_passes(market_factory, now_utc):
     s = _s()
-    m = market_factory()
+    m = market_factory(event_ticker="TEST")
     cands, _ = filter_candidates([m], {m["ticker"]: 95}, s, now_utc)
     assert len(cands) == 1
     assert cands[0].ask_cents == 95
+    assert cands[0].event_ticker == "TEST"
 
 
 def test_ask_out_of_band_rejected(market_factory, now_utc):

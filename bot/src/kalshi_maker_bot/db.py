@@ -181,6 +181,15 @@ class Database:
         )
         return cur.fetchone()
 
+    def count_open_orders_for_event(self, event_ticker: str) -> int:
+        cur = self._conn.execute(
+            "SELECT COUNT(*) FROM sim_orders so "
+            "JOIN markets m ON so.ticker = m.ticker "
+            "WHERE m.event_ticker = ? AND so.status = 'open'",
+            (event_ticker,),
+        )
+        return int(cur.fetchone()[0])
+
     def get_filled_unresolved_orders(self, ticker: str) -> list[sqlite3.Row]:
         cur = self._conn.execute(
             "SELECT * FROM sim_orders WHERE ticker=? AND status='filled' AND pnl_cents IS NULL",

@@ -37,6 +37,10 @@ class OrderManager:
         existing = self._db.get_open_order_for_ticker(cand.ticker)
         if existing is not None:
             return "skip_existing_open"
+        if cand.event_ticker:
+            open_for_event = self._db.count_open_orders_for_event(cand.event_ticker)
+            if open_for_event >= self._settings.max_orders_per_event:
+                return "skip_event_capped"
         plan = build_bid_plan(cand.ticker, cand.ask_cents, self._settings)
         if plan.quantity <= 0:
             return "skip_zero_qty"

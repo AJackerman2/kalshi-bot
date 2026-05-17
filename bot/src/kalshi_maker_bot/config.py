@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     max_ask_cents: Annotated[int, Field(ge=1, le=99)] = 97
     bid_offset_cents: Annotated[int, Field(ge=1, le=2)] = 1
     dollars_per_market: Annotated[float, Field(gt=0)] = 25.0
+    # Max concurrent open orders sharing one event_ticker.  Kalshi events
+    # like bracketed auctions (e.g. KXBNB-26MAY1717-B*) generate dozens of
+    # mutually-exclusive sub-markets; bidding YES on multiple at the same
+    # price guarantees losses on all but at most one.  Defaults to 1 -- one
+    # bid per event at a time.
+    max_orders_per_event: Annotated[int, Field(ge=1)] = 1
     min_hours_to_close: Annotated[float, Field(ge=0)] = 0.5
     # Kalshi's /markets list response currently reports open_interest = 0 and
     # volume_24h = 0 across the entire near-term universe (~17k markets); the
