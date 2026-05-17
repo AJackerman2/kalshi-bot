@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import signal
 import time
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -60,6 +61,33 @@ def _yes_ask_cents_from_list_market(m: dict[str, Any]) -> int | None:
     if cents <= 0 or cents >= 100:
         return None
     return cents
+
+
+def _bucket_asks_by_decile(
+    asks: Iterable[int | None], band_lo: int, band_hi: int
+) -> dict[str, int]:
+    """Histogram a sequence of YES asks (cents) into 10c deciles + special bins.
+
+    Returns a flat dict suitable for structured logging.  Keys:
+      - none:     count of None values (markets with no real ask)
+      - in_band:  count of asks satisfying band_lo <= ask <= band_hi
+      - b00_10:   count of asks with 0 < ask < 10
+      - b10_20:   count of asks with 10 <= ask < 20
+      - ...
+      - b90_100:  count of asks with 90 <= ask < 100
+    """
+    buckets = {f"b{i * 10:02d}_{(i + 1) * 10:02d}": 0 for i in range(10)}
+    none_count = 0
+    in_band = 0
+    for ask in asks:
+        if ask is None:
+            none_count += 1
+            continue
+        if band_lo <= ask <= band_hi:
+            in_band += 1
+        idx = min(max(ask // 10, 0), 9)
+        buckets[f"b{idx * 10:02d}_{(idx + 1) * 10:02d}"] += 1
+    return {"none": none_count, "in_band": in_band, **buckets}
 
 
 class Runner:
@@ -171,6 +199,18 @@ class Runner:
             if not ticker:
                 continue
             ask_lookup[ticker] = _yes_ask_cents_from_list_market(m)
+
+        # Surface the YES-ask price distribution across the universe so we
+        # can pick MIN_ASK_CENTS / MAX_ASK_CENTS from observation rather
+        # than guesswork.  Same idea (and same emission pattern) as the
+        # scan_metadata_distribution log above.
+        if ask_lookup:
+            buckets = _bucket_asks_by_decile(
+                ask_lookup.values(),
+                self._settings.min_ask_cents,
+                self._settings.max_ask_cents,
+            )
+            log.info("ask_distribution", total=len(ask_lookup), **buckets)
 
         cands, rejs = filter_candidates(markets, ask_lookup, self._settings, now)
         rej_reasons: dict[str, int] = {}
