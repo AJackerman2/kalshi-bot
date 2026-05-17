@@ -17,6 +17,7 @@ class Candidate:
     close_time: str | None
     volume: int
     open_interest: int
+    event_ticker: str | None
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ def filter_candidates(
                 close_time=m.get("close_time"),
                 volume=vol,
                 open_interest=oi,
+                event_ticker=m.get("event_ticker"),
             )
         )
     return cands, rejs

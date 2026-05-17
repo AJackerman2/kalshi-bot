@@ -51,7 +51,8 @@ def test_order_manager_refuses_live(tmp_path, monkeypatch):
     sim = Simulator(settings, db, client, events)
     mgr = OrderManager(settings, db, client, sim)
     cand = Candidate(
-        ticker="T", title="t", ask_cents=95, close_time=None, volume=100, open_interest=2000
+        ticker="T", title="t", ask_cents=95, close_time=None, volume=100, open_interest=2000,
+        event_ticker=None,
     )
     with pytest.raises(NotImplementedError):
         mgr.consider_candidate(cand)
